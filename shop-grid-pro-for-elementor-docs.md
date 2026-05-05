@@ -80,7 +80,7 @@ The widget (Layer 1) never directly shows products. The JavaScript (Layer 2) nev
 ```
 woo-elementor-addon/
 │
-├── shop-grid-pro-for-elementor.php          ← WordPress reads this. Plugin starts here.
+├── shop-grid-pro-for-elementor.php  ← WordPress reads this. Plugin starts here.
 ├── composer.json                    ← Package info (not required to run)
 ├── uninstall.php                    ← Runs when you DELETE the plugin
 │
@@ -114,7 +114,7 @@ woo-elementor-addon/
 
 ---
 
-## 4. Step 1 — Plugin Entry Point (`woo-elementor-addon.php`)
+## 4. Step 1 — Plugin Entry Point (`shopgrid-pro-for-elementor.php`)
 
 This is the very first file WordPress reads. Every plugin must have one file at its root with a special comment block at the top.
 
@@ -122,9 +122,9 @@ This is the very first file WordPress reads. Every plugin must have one file at 
 
 ```php
 /**
- * Plugin Name: WooCommerce Elementor Addon
+ * Plugin Name: ShopGrid Pro Fro Elementor
  * Version:     1.0.0
- * Text Domain: woo-elementor-addon
+ * Text Domain: shop-grid-pro-for-elementor
  * ...
  */
 ```
