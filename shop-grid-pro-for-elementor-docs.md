@@ -80,7 +80,7 @@ The widget (Layer 1) never directly shows products. The JavaScript (Layer 2) nev
 ```
 woo-elementor-addon/
 │
-├── woo-elementor-addon.php          ← WordPress reads this. Plugin starts here.
+├── shop-grid-pro-for-elementor.php          ← WordPress reads this. Plugin starts here.
 ├── composer.json                    ← Package info (not required to run)
 ├── uninstall.php                    ← Runs when you DELETE the plugin
 │
@@ -403,6 +403,7 @@ Each route registration has four parts:
 **3. Callback** — which function handles requests to this URL.
 
 **4. Permission callback** — controls who can call this endpoint:
+
 ```php
 // Public — anyone including guests can fetch products
 'permission_callback' => '__return_true',
@@ -412,14 +413,17 @@ Each route registration has four parts:
     return is_user_logged_in();
 },
 ```
+
 If the permission callback returns `false`, WordPress automatically returns a 401 Unauthorized response before your callback even runs.
 
 **5. Args** — define what parameters are accepted and their rules:
+
 ```php
 'args' => [
     'page' => [ 'type' => 'integer', 'default' => 1, 'minimum' => 1 ],
 ]
 ```
+
 WordPress validates these automatically. If someone sends `page=banana`, WordPress rejects it before your callback sees it, because `banana` is not an integer.
 
 ---
@@ -445,6 +449,7 @@ This class has one job: take filter parameters and return matching products from
 ### Building the Query Arguments
 
 **Base query:**
+
 ```php
 $args = [
     'post_type'      => 'product',   // Only get WooCommerce products
@@ -455,14 +460,17 @@ $args = [
 ```
 
 **Search:**
+
 ```php
 if ( ! empty( $search ) ) {
     $args['s'] = $search;
 }
 ```
+
 WordPress's built-in `s` parameter searches post titles and content. Only added when the user has typed something — leaving it out returns all products.
 
 **Category filter:**
+
 ```php
 $args['tax_query'] = [ [
     'taxonomy'         => 'product_cat',
@@ -471,15 +479,18 @@ $args['tax_query'] = [ [
     'include_children' => true,
 ] ];
 ```
+
 `tax_query` filters by taxonomy (a WordPress word for categorisation systems). `product_cat` is WooCommerce's product category taxonomy. `include_children => true` means if you filter by "Clothing", products in "T-Shirts" (a sub-category) also appear.
 
 **Sorting:**
+
 ```php
 case 'price_low':
     $args['meta_key'] = '_price';
     $args['orderby']  = 'meta_value_num';
     $args['order']    = 'ASC';
 ```
+
 WooCommerce stores product prices in the WordPress post metadata table under the key `_price`. `meta_value_num` tells WordPress to sort numerically (so 10 comes after 9, not before 2 as it would alphabetically).
 
 ### Transient Caching
@@ -530,6 +541,7 @@ $params = [
 ```
 
 `$request->get_param()` safely reads URL parameters. Each value is then sanitised:
+
 - `(int)` casts to integer — `"abc"` becomes `0`
 - `sanitize_text_field()` strips HTML tags and extra whitespace
 - `sanitize_key()` strips anything that isn't a lowercase letter, number, underscore, or dash
@@ -558,6 +570,7 @@ $products = array_values( array_filter( $products ) );
 This private function takes a raw product ID and turns it into a clean array the JavaScript can use.
 
 **Product type detection:**
+
 ```php
 if      ( $product->is_type( 'variable' ) ) $type = 'variable';
 elseif  ( $product->is_type( 'grouped' ) )  $type = 'grouped';
@@ -566,6 +579,7 @@ else                                         $type = 'simple';
 ```
 
 WooCommerce has four product types:
+
 - **simple** — one product, one price, add to cart directly
 - **variable** — has options (size, colour etc.), must go to product page to pick a variant
 - **grouped** — a collection of related products shown together (like "Logo Collection")
@@ -574,6 +588,7 @@ WooCommerce has four product types:
 Previously only simple vs variable was checked, which caused grouped and external products to be treated as simple — showing an Add to Cart button that would fail.
 
 **External product extra data:**
+
 ```php
 if ( $type === 'external' ) {
     $buy_url     = esc_url( $product->get_product_url() );
@@ -584,6 +599,7 @@ if ( $type === 'external' ) {
 `get_product_url()` returns the external URL the store admin entered. `get_button_text()` returns the custom button label they set (e.g. "Buy at WordPress.org"). If they didn't set one, it defaults to "Buy Now".
 
 **Wishlist status per product:**
+
 ```php
 'wishlist' => in_array( $product_id, $wishlist_ids, true ),
 ```
@@ -671,6 +687,7 @@ public static function create(): void {
 `dbDelta()` is WordPress's special table creation function. Unlike raw `CREATE TABLE`, it is safe to run multiple times — it creates the table if it doesn't exist, updates it if the structure changed, and does nothing if everything is already correct.
 
 **The table design:**
+
 - `UNIQUE KEY user_product` — prevents the same user from adding the same product to their wishlist twice at the database level. Even if a bug in the code tried to insert twice, the database would reject the duplicate.
 - `KEY user_id` — a database index on `user_id`. When you search "get all products for user 5", the database can find them instantly instead of scanning every row.
 
@@ -681,6 +698,7 @@ public static function create(): void {
 This class is the only place that touches the `wp_pw_wishlist` table. All other code asks this class instead of writing SQL themselves.
 
 **`table()`** — returns the correct table name including WordPress prefix:
+
 ```php
 private static function table(): string {
     global $wpdb;
@@ -689,6 +707,7 @@ private static function table(): string {
 ```
 
 **`add()`** — inserts a wishlist row:
+
 ```php
 $wpdb->insert(
     self::table(),
@@ -696,29 +715,35 @@ $wpdb->insert(
     [ '%d', '%d', '%s' ]
 );
 ```
+
 The third argument `['%d', '%d', '%s']` tells WordPress the data types: `%d` = integer, `%s` = string. WordPress uses these to create a properly escaped SQL statement internally, preventing SQL injection.
 
 **`remove()`** — deletes a specific wishlist row by matching both `user_id` and `product_id`.
 
 **`is_wishlisted()`** — checks if a row exists:
+
 ```php
 $count = $wpdb->get_var( $wpdb->prepare(
     "SELECT COUNT(*) FROM %i WHERE user_id = %d AND product_id = %d",
     self::table(), $user_id, $product_id
 ) );
 ```
+
 `$wpdb->prepare()` creates a safely parameterised query. `%i` is a table name placeholder (safe against injection). `get_var()` returns just the single count value.
 
 **`get_product_ids()`** — returns all wishlisted product IDs for a user:
+
 ```php
 $results = $wpdb->get_col( ... );
 return array_map( 'intval', $results );
 ```
+
 `get_col()` returns a flat array of values from one column. `array_map('intval', ...)` converts every value from a string to an integer, because databases always return strings even for number columns.
 
 ### `WishlistController.php` — Handling API Requests
 
 **`toggle()`** — checks the current state, then does the opposite:
+
 ```php
 $already = WishlistRepository::is_wishlisted( $user_id, $product_id );
 
@@ -730,6 +755,7 @@ if ( $already ) {
     $wishlisted = true;
 }
 ```
+
 Returns the new state so the JavaScript knows whether to show the heart as filled or empty.
 
 **`get_wishlist()`** — returns all the user's wishlisted product IDs. The JavaScript calls this on page load to correctly show which hearts should be filled based on wishlist items from a previous session.
@@ -799,6 +825,7 @@ $this->add_control( 'posts_per_page', [
 ```
 
 Control types used:
+
 - `NUMBER` — a number input field
 - `SELECT` — a dropdown menu
 - `SWITCHER` — a toggle switch (yes/no)
@@ -806,6 +833,7 @@ Control types used:
 - `SLIDER` — a range slider with min and max
 
 **Style controls with CSS selectors:**
+
 ```php
 $this->add_control( 'card_bg', [
     'type'      => Controls_Manager::COLOR,
@@ -866,8 +894,8 @@ The IIFE creates a private scope. Variables defined inside cannot be accessed fr
 ### Global Configuration
 
 ```javascript
-const API       = window.PW_CONFIG?.api_base || "/wp-json/pw/v1";
-const NONCE     = window.PW_CONFIG?.nonce    || "";
+const API = window.PW_CONFIG?.api_base || "/wp-json/pw/v1";
+const NONCE = window.PW_CONFIG?.nonce || "";
 const IS_LOGGED = parseInt(window.PW_CONFIG?.is_logged || "0", 10) === 1;
 ```
 
@@ -882,11 +910,14 @@ function apiFetch(endpoint, options = {}) {
     "X-WP-Nonce": NONCE,
     ...(options.headers || {}),
   };
-  return fetch(`${API}${endpoint}`, { ...options, headers }).then(r => r.json());
+  return fetch(`${API}${endpoint}`, { ...options, headers }).then((r) =>
+    r.json(),
+  );
 }
 ```
 
 Every API call in the plugin goes through this function. It automatically:
+
 - Prepends the full API base URL to the endpoint
 - Adds the `X-WP-Nonce` header that WordPress checks for security
 - Sets `Content-Type` to `application/json`
@@ -924,6 +955,7 @@ const PWToast = (() => {
 `PWToast` is a singleton — one object, created once, accessible throughout the script. The `let container` variable is captured in the closure and persists between calls.
 
 **`show()` — displaying a notification:**
+
 ```javascript
 const toast = document.createElement("div");
 toast.className = `pw-toast pw-toast--${type}`;
@@ -983,6 +1015,7 @@ For logged-in users: async API call, waits for server response.
 Both return the same shape of object so the calling code doesn't need to know which path was taken.
 
 **`syncGuestOnLogin()`** — only runs when a user is logged in and there are guest wishlist items in localStorage:
+
 ```javascript
 async function syncGuestOnLogin() {
   if (!IS_LOGGED) return;
@@ -1008,6 +1041,7 @@ const PWQuickView = (() => {
 ```
 
 **`open( product )`** — receives the full product data object (embedded in the card's `data-product` attribute by the PHP render):
+
 - Fills the modal with the product's image, title, price, and rating
 - Shows the modal by adding `pw-qv--open` class (CSS handles the animation)
 - Sets `document.body.style.overflow = "hidden"` to prevent the page behind from scrolling
@@ -1038,6 +1072,7 @@ class ProductWidget {
 One instance is created for every `.pw-widget` element on the page. Each instance has completely private state — its own page number, search term, active filters, loading flag, and abort controller. No two widgets share state.
 
 **`constructor( el )`:**
+
 ```javascript
 constructor(el) {
   this.el = el;
@@ -1066,6 +1101,7 @@ Generates the toolbar (search input + dropdowns), an empty products container, a
 Returns a string of placeholder card HTML. These have CSS animations that create a sweeping shimmer effect, making the page feel fast while products load.
 
 **`_bindUI()`** — attaches event listeners to search and dropdowns:
+
 ```javascript
 const debouncedSearch = debounce((val) => {
   this.state.search = val;
@@ -1077,27 +1113,33 @@ searchInput.addEventListener("input", (e) => {
   debouncedSearch(e.target.value.trim());
 });
 ```
+
 Every state change resets `page` to `1` because a new filter means starting from the beginning.
 
 **`_bindGlobalEvents()`** — listens for events from other widgets:
+
 ```javascript
 document.addEventListener("pw_wishlist_updated", (e) => {
   const { product_id, wishlisted } = e.detail;
-  this.el.querySelectorAll(`.pw-wishlist-btn[data-product-id="${product_id}"]`)
+  this.el
+    .querySelectorAll(`.pw-wishlist-btn[data-product-id="${product_id}"]`)
     .forEach((btn) => {
       btn.classList.toggle("pw-wishlist-btn--active", wishlisted);
     });
 });
 ```
+
 When any widget on the page fires a `pw_wishlist_updated` event, every widget reacts and updates its heart buttons for that product. This is how cross-widget wishlist sync works. Note: `this.el.querySelectorAll` only searches within this widget's own DOM, but all widgets listen to the same global event.
 
 **`async _load()`** — the AJAX fetch:
+
 ```javascript
 if (this.state.loading) {
   if (this.abortController) this.abortController.abort();
 }
 this.abortController = new AbortController();
 ```
+
 If a previous request is still running when a new one starts (user changed filters quickly), the old request is cancelled via the `AbortController` API. This prevents old results from overwriting newer ones.
 
 The `signal: this.abortController.signal` is passed to `fetch()` via `apiFetch`. When `abort()` is called, the browser cancels the in-flight HTTP request.
@@ -1106,6 +1148,7 @@ The `signal: this.abortController.signal` is passed to `fetch()` via `apiFetch`.
 Loops through the product data, checks if the layout is grid or list, and calls either `_gridCard()` or `_listCard()`. After rendering, calls `_bindProductEvents()` on the new HTML.
 
 **`_gridCard( p, wishlisted )` and `_listCard( p, wishlisted )`** — the button logic:
+
 ```javascript
 const isSimple   = p.type === "simple";
 const isExternal = p.type === "external";
@@ -1117,7 +1160,9 @@ ${isSimple
   : `<a class="pw-view-details" href="${p.permalink}">View Details</a>`
 }
 ```
+
 Three possible buttons:
+
 - **simple** → AJAX Add to Cart button
 - **external** → opens the external URL in a new tab
 - **variable or grouped** → link to the product page
@@ -1126,30 +1171,42 @@ Quick View is only shown for simple products — it makes no sense for grouped o
 
 **`_bindProductEvents( container )`** — attaches click handlers to the just-rendered cards:
 
-*Add to Cart button:*
+_Add to Cart button:_
+
 ```javascript
 btn.disabled = true;
 btn.innerHTML = `<span class="pw-spinner"></span> Adding…`;
 // ... API call ...
 PWToast.show("Product added to cart!", "success");
-document.dispatchEvent(new CustomEvent("pw_cart_updated", { detail: { cart_count: res.cart_count } }));
+document.dispatchEvent(
+  new CustomEvent("pw_cart_updated", {
+    detail: { cart_count: res.cart_count },
+  }),
+);
 ```
+
 Disables immediately on click to prevent double-clicking. Shows spinner. On success, shows toast and fires `pw_cart_updated` event so the cart counter in the header updates.
 
-*Wishlist button:*
+_Wishlist button:_
+
 ```javascript
 const res = await PWWishlist.toggle(productId);
-document.dispatchEvent(new CustomEvent("pw_wishlist_updated", {
-  detail: { product_id: productId, wishlisted: res.wishlisted },
-}));
+document.dispatchEvent(
+  new CustomEvent("pw_wishlist_updated", {
+    detail: { product_id: productId, wishlisted: res.wishlisted },
+  }),
+);
 ```
+
 After toggling, fires a global event. Every widget on the page (via `_bindGlobalEvents`) reacts and updates all heart buttons for that product across the whole page.
 
-*Quick View button:*
+_Quick View button:_
+
 ```javascript
 const product = JSON.parse(e.currentTarget.dataset.product);
 PWQuickView.open(product);
 ```
+
 The full product data was embedded in the HTML when the card was rendered. No second API call needed — just parse and pass to the modal.
 
 **`_renderPagination( pagination )`** — draws page number buttons:
@@ -1180,7 +1237,7 @@ window.elementorFrontend.hooks.addAction(
       el.dataset.pwInit = "1";
       new ProductWidget(el);
     }
-  }
+  },
 );
 ```
 
@@ -1205,6 +1262,7 @@ $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_p
 **When it runs:** Only when an admin clicks "Delete" on the plugin in WP Admin → Plugins. Not on deactivation — only on deletion.
 
 **What it cleans up:**
+
 - Drops the wishlist table permanently
 - Removes any stored plugin options
 - Deletes all cached query transients from the options table
@@ -1213,18 +1271,18 @@ $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_p
 
 ## 17. All WordPress Hooks Used
 
-| Hook | Type | File | Why It's Used |
-|---|---|---|---|
-| `plugins_loaded` | action | main file | Safe point to check if dependencies (WooCommerce, Elementor) are active |
-| `admin_notices` | action | main file | Shows error banners in WP Admin when dependencies are missing |
-| `register_activation_hook` | function | main file | Creates database table once when plugin is activated |
-| `elementor/widgets/register` | action | Main.php | Registers our widgets with Elementor at the correct time |
-| `wp_enqueue_scripts` | action | AssetsManager.php | Loads CSS and JS on frontend pages |
-| `elementor/editor/before_enqueue_scripts` | action | AssetsManager.php | Loads CSS and JS inside Elementor editor |
-| `elementor/preview/enqueue_scripts` | action | AssetsManager.php | Loads CSS and JS in Elementor live preview |
-| `rest_api_init` | action | RestAPI.php, WishlistSync.php | Registers REST API routes when the REST system initialises |
-| `after_setup_theme` | action | (STF Header plugin) | Registers nav menu locations after theme is ready |
-| `frontend/element_ready/{name}.default` | Elementor hook | widget.js | Re-initialises widget JavaScript inside the Elementor editor |
+| Hook                                      | Type           | File                          | Why It's Used                                                           |
+| ----------------------------------------- | -------------- | ----------------------------- | ----------------------------------------------------------------------- |
+| `plugins_loaded`                          | action         | main file                     | Safe point to check if dependencies (WooCommerce, Elementor) are active |
+| `admin_notices`                           | action         | main file                     | Shows error banners in WP Admin when dependencies are missing           |
+| `register_activation_hook`                | function       | main file                     | Creates database table once when plugin is activated                    |
+| `elementor/widgets/register`              | action         | Main.php                      | Registers our widgets with Elementor at the correct time                |
+| `wp_enqueue_scripts`                      | action         | AssetsManager.php             | Loads CSS and JS on frontend pages                                      |
+| `elementor/editor/before_enqueue_scripts` | action         | AssetsManager.php             | Loads CSS and JS inside Elementor editor                                |
+| `elementor/preview/enqueue_scripts`       | action         | AssetsManager.php             | Loads CSS and JS in Elementor live preview                              |
+| `rest_api_init`                           | action         | RestAPI.php, WishlistSync.php | Registers REST API routes when the REST system initialises              |
+| `after_setup_theme`                       | action         | (STF Header plugin)           | Registers nav menu locations after theme is ready                       |
+| `frontend/element_ready/{name}.default`   | Elementor hook | widget.js                     | Re-initialises widget JavaScript inside the Elementor editor            |
 
 ---
 
@@ -1373,6 +1431,7 @@ Wishlist now lives in database. Guest data cleaned up.
 **Root cause:** WooCommerce's session is not automatically initialised during REST API requests. Every AJAX cart request started with a blank session and a blank cart — so the second "Add to Cart" always saw an empty cart and overwrote the first product.
 
 **What the old code did:**
+
 ```php
 if ( ! WC()->cart ) {
     wc_load_cart(); // Only loaded the cart object, did not restore the session
@@ -1380,6 +1439,7 @@ if ( ! WC()->cart ) {
 ```
 
 **What the fix does:**
+
 ```php
 if ( ! WC()->session ) {
     WC()->session = new \WC_Session_Handler();
@@ -1399,6 +1459,7 @@ if ( ! WC()->cart ) {
 **Root cause:** WooCommerce normally saves session data via the `shutdown` PHP hook at the end of a request. REST API requests do not reliably fire this hook.
 
 **What the fix does:**
+
 ```php
 WC()->session->save_data(); // Force-save immediately after adding to cart
 ```
@@ -1408,11 +1469,13 @@ WC()->session->save_data(); // Force-save immediately after adding to cart
 **Root cause:** The product type check was binary — only checking for `variable`, everything else was treated as `simple`. Grouped products (like "Logo Collection") and external products (like "WordPress Pennant") both fell through as `simple` and got an Add to Cart button that would fail.
 
 **What the old code did:**
+
 ```php
 $type = $product->is_type('variable') ? 'variable' : 'simple';
 ```
 
 **What the fix does:**
+
 ```php
 if      ($product->is_type('variable')) $type = 'variable';
 elseif  ($product->is_type('grouped'))  $type = 'grouped';
@@ -1421,6 +1484,7 @@ else                                    $type = 'simple';
 ```
 
 And in JavaScript, three-way button logic:
+
 - `simple` → Add to Cart (AJAX)
 - `external` → Buy Now link (opens external URL in new tab)
 - `variable` or `grouped` → View Details (links to product page)
