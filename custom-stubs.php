@@ -1,6 +1,13 @@
 <?php
 
 
+// autoload
+if (!function_exists('spl_autoload_register')) {
+    function spl_autoload_register()
+    {
+    }
+}
+
 
 /**
  * WooCommerce procedural/template function stubs for IDE
